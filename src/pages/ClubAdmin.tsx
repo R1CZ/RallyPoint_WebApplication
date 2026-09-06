@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { AUDIT_LOG, DAYS, EVENTS, HOURS, MEMBERS_SEED, RISK_QUEUE, utilizationGrid } from "../lib/data";
-import { clubHealth, riskLevel, utilizationInsight } from "../lib/engine";
-import type { RiskLevel } from "../lib/engine";
+import { AUDIT_LOG, DAYS, EVENTS, HOURS, MEMBERS_SEED, PLAYERS, RISK_QUEUE, playerName, utilizationGrid } from "../lib/data";
+import { advanceBracket, clubHealth, generateBracket, riskLevel, shufflePairs, utilizationInsight } from "../lib/engine";
+import type { BracketMatch, EventChatMessage, RiskLevel } from "../lib/engine";
 import { Avatar, Bars, Button, Card, Chip, Gauge, HeatCell, Icon, Logo, Modal, StatPill, useToast, VerifyBadge, inputCls, Field, Tabs } from "../components/ui";
 import type { IconName } from "../components/ui";
 import type { SessionUser } from "./Onboarding";
@@ -299,37 +299,73 @@ function Members() {
   );
 }
 
+interface ManagedEvent {
+  id: string; title: string; type: string; cap: number; filled: number; waitlist: number; fee: number;
+  elimination: "single" | "double"; pairing: "blind" | "pair";
+  chatOpen: boolean; chat: EventChatMessage[]; participants: string[]; paid: string[];
+  pairs: [string, string][] | null; bracket: BracketMatch[] | null; champion: string | null;
+}
+
 function EventsAdmin() {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("Open Play");
   const [cap, setCap] = useState(16);
-  const [created, setCreated] = useState<{ id: string; title: string; type: string; cap: number }[]>([]);
+  const [elim, setElim] = useState<"single" | "double">("single");
+  const [pairing, setPairing] = useState<"blind" | "pair">("blind");
+  const [opsId, setOpsId] = useState<string | null>(null);
+  const [events, setEvents] = useState<ManagedEvent[]>(() =>
+    EVENTS.filter((e) => e.clubId === "c1").map((e) => ({
+      id: e.id, title: e.title, type: e.type, cap: e.capacity, filled: e.filled, waitlist: e.waitlist, fee: e.fee,
+      elimination: e.elimination ?? "single",
+      pairing: e.pairing ?? (e.type === "Open Play" ? "blind" : "pair"),
+      chatOpen: e.chatOpen ?? false, chat: e.chat ?? [], participants: e.participants ?? [], paid: e.paid ?? [],
+      pairs: null, bracket: null, champion: null,
+    }))
+  );
+  const opsEvent = events.find((e) => e.id === opsId) ?? null;
+  const patch = (id: string, p: Partial<ManagedEvent>) => setEvents((ev) => ev.map((e) => (e.id === id ? { ...e, ...p } : e)));
+  const isOP = type === "Open Play";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display font-black tracking-tight text-3xl">Events</h1>
-          <p className="mt-1.5 text-chalk/55 text-[14px]">Create, cap and waitlist-manage. Full events auto-enable smart waitlists with timed offers.</p>
+          <p className="mt-1.5 text-chalk/55 text-[14px]">Create, cap and waitlist-manage. Open Play events get an automatic group chat, receipt verification, shuffle and bracket generation.</p>
         </div>
         <Button icon="plus" onClick={() => setOpen(true)}>Create event</Button>
       </div>
 
       <div className="grid md:grid-cols-2 gap-5">
-        {[...created.map((c) => ({ id: c.id, title: c.title, type: c.type, capacity: c.cap, filled: 0, waitlist: 0 })), ...EVENTS.filter((e) => e.clubId === "c1")].map((e) => {
-          const full = e.filled >= e.capacity;
+        {events.map((e) => {
+          const full = e.filled >= e.cap;
           return (
             <Card key={e.id} className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex gap-1.5 mb-2"><Chip tone="gold">{e.type}</Chip>{full && <Chip tone="blood">Full</Chip>}{e.waitlist > 0 && <Chip tone="gold">{e.waitlist} waiting</Chip>}</div>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <Chip tone="gold">{e.type}</Chip>
+                    {e.type === "Open Play" || e.type === "Tournament" ? (
+                      <>
+                        <Chip tone="teal">{e.elimination === "double" ? "Double Elim" : "Single Elim"}</Chip>
+                        <Chip>{e.pairing === "blind" ? "Blind Pairing" : "By Pair"}</Chip>
+                      </>
+                    ) : null}
+                    {full && <Chip tone="blood">FULL</Chip>}
+                    {e.waitlist > 0 && <Chip tone="gold">{e.waitlist} waiting</Chip>}
+                    {!e.chatOpen && e.type === "Open Play" && e.chat.length > 0 && <Chip tone="dim">Chat closed</Chip>}
+                  </div>
                   <p className="font-display font-extrabold tracking-tight text-lg leading-tight">{e.title}</p>
                 </div>
-                <p className="font-mono text-[12px] text-chalk/45 shrink-0">{e.filled}/{e.capacity}</p>
+                <p className="font-mono text-[12px] text-chalk/45 shrink-0">{e.filled}/{e.cap}</p>
               </div>
-              <div className="mt-3 h-1.5 rounded-full bg-chalk/8"><div className={`h-full rounded-full ${full ? "bg-blood" : "bg-lime"}`} style={{ width: `${Math.min(100, (e.filled / e.capacity) * 100)}%` }} /></div>
+              <div className="mt-3 h-1.5 rounded-full bg-chalk/8"><div className={`h-full rounded-full ${full ? "bg-blood" : "bg-lime"}`} style={{ width: `${Math.min(100, (e.filled / e.cap) * 100)}%` }} /></div>
               <div className="mt-4 flex flex-wrap gap-2">
+                {e.type === "Open Play" && (
+                  <Button size="sm" icon="chat" onClick={() => setOpsId(e.id)}>Manage Open Play</Button>
+                )}
                 <Button size="sm" variant="dark" onClick={() => toast({ icon: "users", title: "Waitlist processed", body: e.waitlist > 0 ? `Top eligible player offered the next opening (30-min claim window).` : "No active waitlist for this event." })}>Run waitlist fill</Button>
                 <Button size="sm" variant="ghost" onClick={() => toast({ icon: "bell", title: "Reminder queued", body: "All registrants notified 3h before start." })}>Send reminder</Button>
                 <Button size="sm" variant="ghost" className="text-blood! hover:bg-blood/10!" onClick={() => toast({ icon: "x", tone: "blood", title: "Event cancelled", body: "Registrants refunded/notified per policy. Fee-ready hook triggered (no charge in sandbox)." })}>Cancel</Button>
@@ -349,22 +385,400 @@ function EventsAdmin() {
               {["Open Play", "Training", "Tournament", "Beginner Night", "Doubles Night", "Social Night", "League", "Challenge Match"].map((t) => <option key={t}>{t}</option>)}
             </select>
           </Field>
+
+          {(isOP || type === "Tournament") && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Field label="Elimination">
+                <div className="grid grid-cols-2 gap-2">
+                  {([["single", "Single Elim"], ["double", "Double Elim"]] as const).map(([v, l]) => (
+                    <button key={v} type="button" onClick={() => setElim(v)}
+                      className={`rounded-lg border px-3 py-2.5 text-[12.5px] font-bold transition ${elim === v ? "border-lime/60 bg-lime/12 text-lime" : "border-chalk/15 text-chalk/55 hover:border-chalk/30"}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Pairing">
+                {isOP ? (
+                  <div className="rounded-lg border border-chalk/12 bg-court-900/70 px-3 py-2.5 flex items-center gap-2.5">
+                    <Icon name="lock" size={14} className="text-chalk/40 shrink-0" />
+                    <div>
+                      <p className="text-[12.5px] font-bold text-chalk/80">Blind Pairing</p>
+                      <p className="text-[10.5px] text-chalk/40 leading-snug">Automatic for Open Play — paid players are shuffled into random pairs.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {([["blind", "Blind Pairing"], ["pair", "By Pair"]] as const).map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setPairing(v)}
+                        className={`rounded-lg border px-3 py-2.5 text-[12.5px] font-bold transition ${pairing === v ? "border-lime/60 bg-lime/12 text-lime" : "border-chalk/15 text-chalk/55 hover:border-chalk/30"}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Field>
+            </div>
+          )}
+
           <Field label="Capacity">
             <input className={inputCls} type="number" min={2} max={128} value={cap} onChange={(e) => setCap(Math.max(2, +e.target.value || 2))} />
           </Field>
+          {isOP && (
+            <div className="rounded-lg bg-teal/6 border border-teal/25 px-3.5 py-2.5 text-[12px] text-chalk/65 flex items-start gap-2.5">
+              <Icon name="chat" size={14} className="text-teal shrink-0 mt-0.5" />
+              <span>On publish, a <span className="font-bold text-chalk/85">group chat is created automatically</span> — only players who join are added. They send payment receipts there, you verify them, then shuffle paid players into the bracket.</span>
+            </div>
+          )}
           <div className="rounded-lg bg-gold/6 border border-gold/25 px-3.5 py-2.5 text-[12px] text-chalk/60">
             Skill-balance check runs automatically once 4+ players register — organizers get a “Good / Playable / Significant gap” read with override.
           </div>
           <div className="flex gap-2.5 justify-end pt-1">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
             <Button icon="check" disabled={title.trim().length < 4} onClick={() => {
-              setCreated((p) => [...p, { id: `new${Date.now()}`, title: title.trim(), type, cap }]);
+              const id = `new${Date.now()}`;
+              const chat: EventChatMessage[] = isOP
+                ? [{ id: `${id}-sys`, author: "System", playerId: "sys", time: "now", text: "Group chat created automatically — only registered players are added." }]
+                : [];
+              setEvents((p) => [...p, {
+                id, title: title.trim(), type, cap, filled: 0, waitlist: 0, fee: 5,
+                elimination: elim, pairing: isOP ? "blind" : pairing,
+                chatOpen: isOP, chat, participants: [], paid: [], pairs: null, bracket: null, champion: null,
+              }]);
               setTitle(""); setOpen(false);
-              toast({ icon: "calendar", title: "Event published", body: "Registration open. Waitlist arms automatically at capacity." });
+              toast({ icon: "calendar", title: "Event published", body: isOP ? "Registration open — the group chat is live and waiting for joiners." : "Registration open. Waitlist arms automatically at capacity." });
             }}>Publish</Button>
           </div>
         </div>
       </Modal>
+
+      {opsEvent && <OpenPlayOps e={opsEvent} patch={patch} onClose={() => setOpsId(null)} />}
+    </div>
+  );
+}
+
+/* ---------------- Open Play operations ---------------- */
+function OpenPlayOps({ e, patch, onClose }: { e: ManagedEvent; patch: (id: string, p: Partial<ManagedEvent>) => void; onClose: () => void }) {
+  const toast = useToast();
+  const [tab, setTab] = useState<"chat" | "payments" | "shuffle" | "bracket">("chat");
+  const [msg, setMsg] = useState("");
+  const [shuffling, setShuffling] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const full = e.filled >= e.cap;
+  const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const sysMsg = (text: string): EventChatMessage => ({ id: `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`, author: "System", playerId: "sys", time: now(), text });
+
+  const simulateSignups = () => {
+    const candidates = PLAYERS.filter((p) => !e.participants.includes(p.id)).slice(0, 3);
+    if (candidates.length === 0) { toast({ icon: "users", tone: "gold", title: "No more club players", body: "Everyone in the demo roster is already registered for this event." }); return; }
+    const newFilled = Math.min(e.cap, e.filled + candidates.length);
+    const newChat = [...e.chat];
+    candidates.forEach((p, i) => {
+      newChat.push({ id: `j${Date.now()}${i}`, author: p.name, playerId: p.id, time: now(), text: "Joined from the player app — slot confirmed." });
+      if (i === 0) newChat.push({ id: `r${Date.now()}${i}`, author: p.name, playerId: p.id, time: now(), receipt: { fileName: `receipt-${p.id}-${Date.now().toString().slice(-4)}.png` } });
+    });
+    if (newFilled >= e.cap) newChat.push(sysMsg("Event is now FULL — further joiners go to the smart waitlist."));
+    patch(e.id, { filled: newFilled, participants: [...e.participants, ...candidates.map((p) => p.id)], chat: newChat });
+    toast({ icon: "users", title: `${candidates.length} player${candidates.length > 1 ? "s" : ""} registered`, body: newFilled >= e.cap ? "Event hit capacity — FULL status is now live for players." : "Added to the event and the group chat." });
+  };
+
+  const markPaid = (pid: string) => {
+    if (e.paid.includes(pid)) return;
+    patch(e.id, {
+      paid: [...e.paid, pid],
+      chat: [...e.chat, sysMsg(`${playerName(pid)} verified as Paid — moved to the shuffle pool.`)],
+    });
+    toast({ icon: "check", tone: "teal", title: "Payment verified", body: `${playerName(pid)} is now in the shuffle pool.` });
+  };
+
+  const doShuffle = () => {
+    setShuffling(true);
+    setTimeout(() => {
+      const pairs = shufflePairs(e.paid, e.pairing);
+      patch(e.id, { pairs });
+      setShuffling(false);
+      toast({ icon: "spark", title: e.pairing === "blind" ? "Blind shuffle complete" : "Pairs locked", body: `${pairs.length} pair${pairs.length > 1 ? "s" : ""} formed from ${e.paid.length} paid players.` });
+    }, 1100);
+  };
+
+  const sendOrg = () => {
+    if (!msg.trim()) return;
+    patch(e.id, { chat: [...e.chat, { id: `o${Date.now()}`, author: "Organizer", playerId: "org", time: now(), text: msg.trim() }] });
+    setMsg("");
+  };
+
+  const TABS: { id: typeof tab; label: string; icon: IconName }[] = [
+    { id: "chat", label: "Group chat", icon: "chat" },
+    { id: "payments", label: "Payments", icon: "doc" },
+    { id: "shuffle", label: "Shuffle", icon: "spark" },
+    { id: "bracket", label: "Bracket", icon: "trophy" },
+  ];
+
+  return (
+    <Modal open onClose={onClose} title={e.title} wide>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tone="gold">{e.type}</Chip>
+          <Chip tone="teal">{e.elimination === "double" ? "Double Elim" : "Single Elim"}</Chip>
+          <Chip>{e.pairing === "blind" ? "Blind Pairing" : "By Pair"}</Chip>
+          <Chip tone={full ? "blood" : "lime"}>{e.filled}/{e.cap}{full ? " · FULL" : ""}</Chip>
+          <span className="flex-1" />
+          <Button size="sm" variant="dark" icon="users" onClick={simulateSignups}>Simulate sign-ups</Button>
+          {e.chatOpen ? (
+            confirmClose ? (
+              <span className="flex items-center gap-2">
+                <Button size="sm" variant="danger" onClick={() => {
+                  patch(e.id, { chatOpen: false, chat: [...e.chat, sysMsg("The organizer closed this group chat. It is no longer available to players.")] });
+                  setConfirmClose(false);
+                  toast({ icon: "lock", tone: "blood", title: "Group chat closed", body: "The temporary event chat has been removed for players." });
+                }}>Confirm close</Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmClose(false)}>Keep open</Button>
+              </span>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-blood! hover:bg-blood/10!" icon="x" onClick={() => setConfirmClose(true)}>Close group chat</Button>
+            )
+          ) : (
+            <Chip tone="dim"><Icon name="lock" size={11} /> Chat closed</Chip>
+          )}
+        </div>
+
+        <div className="flex gap-1.5 border-b border-chalk/10 pb-2 overflow-x-auto">
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-[12.5px] font-bold whitespace-nowrap transition ${tab === t.id ? "bg-lime/12 text-lime border border-lime/25" : "text-chalk/50 hover:text-chalk border border-transparent"}`}>
+              <Icon name={t.icon} size={14} /> {t.label}
+              {t.id === "payments" && <span className="font-mono text-[10px] text-teal">{e.paid.length}/{e.participants.length}</span>}
+              {t.id === "shuffle" && e.pairs && <Icon name="check" size={12} className="text-lime" />}
+              {t.id === "bracket" && e.bracket && <Icon name="check" size={12} className="text-lime" />}
+            </button>
+          ))}
+        </div>
+
+        {/* -------- CHAT -------- */}
+        {tab === "chat" && (
+          <div>
+            {!e.chatOpen ? (
+              <div className="rounded-xl border border-chalk/10 bg-court-900/60 px-6 py-10 text-center">
+                <Icon name="lock" size={26} className="text-chalk/30 mx-auto" />
+                <p className="mt-3 font-display font-bold text-chalk/70">Group chat closed</p>
+                <p className="mt-1 text-[12.5px] text-chalk/45 max-w-sm mx-auto">The temporary event chat was removed after the event wrapped up. The message history stays in the organizer audit log only.</p>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-xl border border-chalk/10 bg-court-950/60 h-72 overflow-y-auto p-3.5 space-y-2.5">
+                  {e.chat.length === 0 && <p className="text-[12.5px] text-chalk/40 text-center pt-16">No messages yet — players are added automatically when they join.</p>}
+                  {e.chat.map((m) => (
+                    <div key={m.id} className={`max-w-[85%] ${m.playerId === "org" ? "ml-auto" : ""}`}>
+                      {m.playerId === "sys" ? (
+                        <p className="text-center text-[11px] text-chalk/40 font-mono py-1">— {m.text} · {m.time}</p>
+                      ) : (
+                        <div className={`rounded-xl px-3.5 py-2.5 border ${m.playerId === "org" ? "bg-lime/10 border-lime/20" : "bg-court-900 border-chalk/10"}`}>
+                          <p className="flex items-baseline gap-2 text-[11px] font-mono mb-1">
+                            <span className={m.playerId === "org" ? "text-lime font-bold" : "text-teal font-bold"}>{m.author}</span>
+                            <span className="text-chalk/35">{m.time}</span>
+                            {m.receipt && !e.paid.includes(m.playerId) && m.playerId !== "org" && (
+                              <button onClick={() => markPaid(m.playerId)} className="ml-auto text-[10px] font-bold text-court-950 bg-lime rounded px-2 py-0.5 hover:bg-lime-3 transition">Mark Paid</button>
+                            )}
+                            {m.receipt && e.paid.includes(m.playerId) && <span className="ml-auto text-[10px] font-bold text-lime flex items-center gap-1"><Icon name="check" size={10} /> Paid</span>}
+                          </p>
+                          {m.text && <p className="text-[13px] text-chalk/85 leading-snug">{m.text}</p>}
+                          {m.receipt && (
+                            <p className="flex items-center gap-2 rounded-lg bg-chalk/6 border border-chalk/12 px-3 py-2 text-[12px] font-mono text-chalk/75">
+                              <Icon name="doc" size={14} className="text-gold" /> {m.receipt.fileName}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <input className={inputCls} value={msg} onChange={(ev) => setMsg(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && sendOrg()} placeholder="Message the group as organizer…" />
+                  <Button icon="arrow" onClick={sendOrg} disabled={!msg.trim()}>Send</Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* -------- PAYMENTS -------- */}
+        {tab === "payments" && (
+          <div className="space-y-2">
+            {e.participants.length === 0 && (
+              <p className="text-[13px] text-chalk/45 text-center py-10">No registrants yet — use “Simulate sign-ups” or wait for players to join from the player app.</p>
+            )}
+            {e.participants.map((pid) => {
+              const receipt = [...e.chat].reverse().find((m) => m.playerId === pid && m.receipt);
+              const isPaid = e.paid.includes(pid);
+              return (
+                <div key={pid} className="flex items-center gap-3 rounded-xl border border-chalk/10 bg-court-900/60 px-4 py-3">
+                  <Avatar name={playerName(pid)} hue={(pid.charCodeAt(1) * 47) % 360} size={34} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-bold truncate">{playerName(pid)}</p>
+                    <p className="text-[11px] font-mono text-chalk/45 truncate flex items-center gap-1.5">
+                      {receipt ? <><Icon name="doc" size={11} className="text-gold" /> {receipt.receipt!.fileName}</> : "No receipt sent yet"}
+                    </p>
+                  </div>
+                  {isPaid ? (
+                    <Chip tone="lime"><Icon name="check" size={11} /> Paid</Chip>
+                  ) : (
+                    <Button size="sm" variant="dark" disabled={!receipt} onClick={() => markPaid(pid)}>{receipt ? "Verify & mark Paid" : "Awaiting receipt"}</Button>
+                  )}
+                </div>
+              );
+            })}
+            {e.participants.length > 0 && (
+              <p className="text-[11.5px] text-chalk/40 pt-1">Fee: ${e.fee} per player · verifying a receipt moves the player into the shuffle pool automatically.</p>
+            )}
+          </div>
+        )}
+
+        {/* -------- SHUFFLE -------- */}
+        {tab === "shuffle" && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-chalk/10 bg-court-900/60 p-4">
+              <p className="font-mono text-[11px] tracking-widest text-chalk/45">PAID PLAYERS — SHUFFLE POOL ({e.paid.length})</p>
+              <div className="mt-3 flex flex-wrap gap-2 min-h-9">
+                {e.paid.length === 0 && <p className="text-[12.5px] text-chalk/40">No paid players yet. Verify receipts in the Payments tab first.</p>}
+                {e.paid.map((pid) => (
+                  <span key={pid} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-bold transition ${shuffling ? "animate-pulse border-gold/50 text-gold bg-gold/8" : "border-teal/40 text-teal bg-teal/8"}`}>
+                    <Icon name="users" size={12} /> {playerName(pid)}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button icon="spark" disabled={e.paid.length < 2 || shuffling} onClick={doShuffle}>
+                  {shuffling ? "Shuffling…" : e.pairing === "blind" ? "Shuffle paid players (Blind Pairing)" : "Lock pairs (By Pair)"}
+                </Button>
+                {e.pairs && (
+                  <Button variant="dark" icon="trophy" disabled={!!e.bracket} onClick={() => {
+                    patch(e.id, { bracket: generateBracket(e.pairs!, e.elimination) });
+                    toast({ icon: "trophy", title: "Bracket generated", body: `${e.elimination === "double" ? "Double" : "Single"} elimination bracket built from the shuffled pairs.` });
+                  }}>
+                    {e.bracket ? "Bracket ready" : `Generate ${e.elimination === "double" ? "double" : "single"}-elim bracket`}
+                  </Button>
+                )}
+              </div>
+              <p className="mt-3 text-[11.5px] text-chalk/40">
+                {e.pairing === "blind"
+                  ? "Blind Pairing randomizes matchups from the paid pool — no seeding, no favorites. Odd pools get a bye."
+                  : "By Pair keeps players in their registered pairs and seeds them straight into the bracket."}
+              </p>
+            </div>
+            {e.pairs && (
+              <div className="rounded-xl border border-lime/20 bg-lime/5 p-4">
+                <p className="font-mono text-[11px] tracking-widest text-lime">GENERATED PAIRS</p>
+                <div className="mt-3 grid sm:grid-cols-2 gap-2">
+                  {e.pairs.map((pr, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-court-900/70 border border-chalk/10 px-3 py-2 text-[12.5px] font-semibold">
+                      <span className="font-mono text-[10px] text-lime">M{i + 1}</span>
+                      <span className="truncate">{playerName(pr[0])}</span>
+                      <span className="text-chalk/35 font-mono text-[10px]">vs</span>
+                      <span className="truncate">{playerName(pr[1])}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* -------- BRACKET -------- */}
+        {tab === "bracket" && (
+          <div>
+            {!e.bracket ? (
+              <div className="rounded-xl border border-dashed border-chalk/15 px-6 py-12 text-center">
+                <Icon name="trophy" size={26} className="text-chalk/25 mx-auto" />
+                <p className="mt-3 font-display font-bold text-chalk/60">No bracket yet</p>
+                <p className="mt-1 text-[12.5px] text-chalk/40">Shuffle the paid players first — the bracket generates automatically from those pairs.</p>
+              </div>
+            ) : (
+              <BracketBoard bracket={e.bracket} elim={e.elimination} champion={e.champion}
+                onPick={(mid, side) => {
+                  const res = advanceBracket(e.bracket!, mid, side);
+                  patch(e.id, { bracket: res.bracket, champion: res.champion ?? e.champion });
+                  if (res.champion) toast({ icon: "trophy", tone: "gold", title: "Champion crowned", body: `${playerName(res.champion)} takes the event. Results feed rankings and Play Style DNA.` });
+                }} />
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function BracketBoard({ bracket, elim, champion, onPick }: {
+  bracket: BracketMatch[]; elim: "single" | "double"; champion: string | null;
+  onPick: (id: string, side: "a" | "b") => void;
+}) {
+  const winners = bracket.filter((m) => !m.losers);
+  const losers = bracket.filter((m) => m.losers && m.id !== "gf");
+  const gf = bracket.find((m) => m.id === "gf");
+  const wRounds = Math.max(...winners.map((m) => m.round)) + 1;
+  const lRounds = losers.length ? Math.max(...losers.map((m) => m.round)) + 1 : 0;
+
+  const renderMatch = (m: BracketMatch) => {
+    const ready = !!m.a && !!m.b && m.a !== "BYE" && m.b !== "BYE" && !m.winner;
+    return (
+      <div key={m.id} className="rounded-lg border border-chalk/12 bg-court-900/80 overflow-hidden w-[164px] shrink-0">
+        {(["a", "b"] as const).map((s) => {
+          const val = m[s];
+          const name = val ? playerName(val) : "TBD";
+          const won = m.winner === s;
+          return (
+            <button key={s} disabled={!ready} onClick={() => onPick(m.id, s)}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-[11.5px] font-bold border-b border-chalk/8 last:border-b-0 transition-colors ${won ? "bg-lime/15 text-lime" : m.winner ? "text-chalk/30" : ready ? "text-chalk/85 hover:bg-lime/10 cursor-pointer" : "text-chalk/40"}`}>
+              <span className="truncate">{name}</span>
+              {won && <Icon name="check" size={11} />}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      {champion && (
+        <div className="rounded-xl border border-gold/40 bg-gold/8 px-5 py-4 flex items-center gap-3.5">
+          <Icon name="trophy" size={22} className="text-gold" />
+          <div>
+            <p className="font-mono text-[10.5px] tracking-widest text-gold">EVENT CHAMPION</p>
+            <p className="font-display font-black text-xl tracking-tight">{playerName(champion)}</p>
+          </div>
+        </div>
+      )}
+      <div>
+        <p className="font-mono text-[11px] tracking-widest text-chalk/45 mb-2.5">WINNERS BRACKET — click a side to advance the winner</p>
+        <div className="flex gap-4 overflow-x-auto pb-2 items-start">
+          {Array.from({ length: wRounds }).map((_, r) => (
+            <div key={r} className="flex flex-col gap-3">
+              <p className="font-mono text-[10px] text-lime tracking-widest text-center">{r === wRounds - 1 ? "FINAL" : `ROUND ${r + 1}`}</p>
+              {winners.filter((m) => m.round === r).map(renderMatch)}
+            </div>
+          ))}
+        </div>
+      </div>
+      {elim === "double" && (
+        <div>
+          <p className="font-mono text-[11px] tracking-widest text-blood/80 mb-2.5">LOSERS BRACKET — one more life, then it's over</p>
+          <div className="flex gap-4 overflow-x-auto pb-2 items-start">
+            {Array.from({ length: lRounds }).map((_, r) => (
+              <div key={r} className="flex flex-col gap-3">
+                <p className="font-mono text-[10px] text-blood/70 tracking-widest text-center">LOSERS R{r + 1}</p>
+                {losers.filter((m) => m.round === r).map(renderMatch)}
+              </div>
+            ))}
+            {gf && (
+              <div className="flex flex-col gap-3">
+                <p className="font-mono text-[10px] text-gold tracking-widest text-center">GRAND FINAL</p>
+                {renderMatch(gf)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

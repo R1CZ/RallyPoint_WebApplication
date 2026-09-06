@@ -84,6 +84,25 @@ export interface ClubInfo {
   utilization: number; // avg %
 }
 
+export interface EventChatMessage {
+  id: string;
+  author: string;
+  playerId: string; // "sys" for system, "org" for organizer
+  time: string;
+  text?: string;
+  receipt?: { fileName: string };
+}
+
+export interface BracketMatch {
+  id: string;
+  round: number;
+  idx: number;
+  a: string | null;
+  b: string | null;
+  winner: "a" | "b" | null;
+  losers?: boolean;
+}
+
 export interface ClubEvent {
   id: string;
   clubId: string;
@@ -100,6 +119,105 @@ export interface ClubEvent {
   waitlist: number;
   outdoor: boolean;
   rainRisk?: number;
+  elimination?: "single" | "double";
+  pairing?: "blind" | "pair";
+  chatOpen?: boolean;
+  chat?: EventChatMessage[];
+  participants?: string[];
+  paid?: string[];
+}
+
+/* ---------------------------------------------------------------
+   TOURNAMENT PIPELINE — shuffle, bracket build, advancement.
+   Blind pairing shuffles paid players; "By Pair" keeps
+   registration order. Double elimination routes losers bracket
+   drops per standard layout.
+--------------------------------------------------------------- */
+export function shufflePairs(ids: string[], mode: "blind" | "pair"): [string, string][] {
+  const pool = [...ids];
+  if (mode === "blind") {
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+  }
+  const pairs: [string, string][] = [];
+  for (let i = 0; i + 1 < pool.length; i += 2) pairs.push([pool[i], pool[i + 1]]);
+  if (pool.length % 2 === 1) pairs.push([pool[pool.length - 1], "BYE"]);
+  return pairs;
+}
+
+export function generateBracket(pairs: [string, string][], elimination: "single" | "double"): BracketMatch[] {
+  const P = 2 ** Math.max(1, Math.ceil(Math.log2(Math.max(2, pairs.length))));
+  const padded: [string, string][] = [...pairs];
+  while (padded.length < P) padded.push(["BYE", "BYE"]);
+  const R = Math.round(Math.log2(P));
+  const out: BracketMatch[] = [];
+  for (let r = 0; r < R; r++) {
+    const count = P / 2 ** (r + 1);
+    for (let i = 0; i < count; i++) {
+      const m: BracketMatch = { id: `w${r}-${i}`, round: r, idx: i, a: null, b: null, winner: null };
+      if (r === 0) {
+        m.a = padded[i * 2][0];
+        m.b = padded[i * 2][1];
+        if (m.a === "BYE") m.winner = "b";
+        else if (m.b === "BYE") m.winner = "a";
+      }
+      out.push(m);
+    }
+  }
+  if (elimination === "double" && R >= 2) {
+    const L = 2 * R - 3;
+    for (let j = 0; j <= L; j++) {
+      const count = Math.max(1, Math.floor(P / 2 ** (Math.floor(j / 2) + 2)));
+      for (let i = 0; i < count; i++) out.push({ id: `l${j}-${i}`, round: j, idx: i, a: null, b: null, winner: null, losers: true });
+    }
+    out.push({ id: "gf", round: L + 1, idx: 0, a: null, b: null, winner: null, losers: true });
+  }
+  // auto-advance byes from round zero
+  out.forEach((m) => {
+    if (m.round === 0 && !m.losers && m.winner && (m.a === "BYE" || m.b === "BYE")) {
+      const w = (m.winner === "a" ? m.a : m.b)!;
+      const t = out.find((x) => x.id === `w1-${Math.floor(m.idx / 2)}`);
+      const slot = m.idx % 2 === 0 ? "a" : "b";
+      if (t && !t[slot]) t[slot] = w;
+    }
+  });
+  return out;
+}
+
+export function advanceBracket(br: BracketMatch[], id: string, side: "a" | "b"): { bracket: BracketMatch[]; champion: string | null } {
+  const b = br.map((m) => ({ ...m }));
+  const m = b.find((x) => x.id === id);
+  if (!m || m.winner) return { bracket: b, champion: null };
+  const winner = side === "a" ? m.a : m.b;
+  const loser = side === "a" ? m.b : m.a;
+  if (!winner || winner === "BYE" || !loser || loser === "BYE") return { bracket: b, champion: null };
+  m.winner = side;
+  const hasGF = b.some((x) => x.id === "gf");
+  const R = Math.max(...b.filter((x) => !x.losers).map((x) => x.round)) + 1;
+  const lastL = hasGF ? Math.max(...b.filter((x) => x.losers && x.id !== "gf").map((x) => x.round)) : -1;
+  const put = (tid: string, slot: "a" | "b", name: string) => {
+    const t = b.find((x) => x.id === tid);
+    if (t && !t[slot]) t[slot] = name;
+  };
+  let champion: string | null = null;
+  if (!m.losers) {
+    if (m.round < R - 1) put(`w${m.round + 1}-${Math.floor(m.idx / 2)}`, m.idx % 2 === 0 ? "a" : "b", winner);
+    else if (hasGF) put("gf", "a", winner);
+    else champion = winner;
+    if (hasGF) {
+      if (m.round === 0) put(`l0-${Math.floor(m.idx / 2)}`, m.idx % 2 === 0 ? "a" : "b", loser);
+      else if (2 * m.round - 1 <= lastL) put(`l${2 * m.round - 1}-${m.idx}`, "b", loser);
+    }
+  } else if (m.id === "gf") {
+    champion = winner;
+  } else {
+    if (m.round === lastL) put("gf", "b", winner);
+    else if (m.round % 2 === 0) put(`l${m.round + 1}-${m.idx}`, "a", winner);
+    else put(`l${m.round + 1}-${Math.floor(m.idx / 2)}`, m.idx % 2 === 0 ? "a" : "b", winner);
+  }
+  return { bracket: b, champion };
 }
 
 /* ---------------------------------------------------------------

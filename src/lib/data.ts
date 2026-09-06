@@ -69,13 +69,41 @@ CLUBS.forEach((c) => {
 export const EVENTS: ClubEvent[] = [
   { id: "e1", clubId: "c1", title: "Thursday Night Doubles Ladder", type: "League", day: "Thu", date: "Thu 12 Jun", time: "19:00 – 21:00", capacity: 24, filled: 24, level: "Intermediate+", fee: 8, organizer: "Coach Dana", waitlist: 6, outdoor: false },
   { id: "e2", clubId: "c1", title: "Beginner Fundamentals Clinic", type: "Training", day: "Sat", date: "Sat 14 Jun", time: "09:00 – 10:30", capacity: 12, filled: 9, level: "Beginner", fee: 15, organizer: "Coach Dana", waitlist: 0, outdoor: false },
-  { id: "e3", clubId: "c2", title: "Sunset Mixed Round-Robin", type: "Open Play", day: "Sat", date: "Sat 14 Jun", time: "18:30 – 20:30", capacity: 16, filled: 16, level: "Intermediate", fee: 5, organizer: "Noor Haddad", waitlist: 4, outdoor: true, rainRisk: 62 },
+  { id: "e3", clubId: "c2", title: "Sunset Mixed Round-Robin", type: "Open Play", day: "Sat", date: "Sat 14 Jun", time: "18:30 – 20:30", capacity: 16, filled: 16, level: "Intermediate", fee: 5, organizer: "Noor Haddad", waitlist: 4, outdoor: true, rainRisk: 62,
+    elimination: "single", pairing: "blind", chatOpen: true,
+    participants: ["p1", "p2", "p3", "p4", "p5", "p6"],
+    paid: ["p1", "p2", "p4"],
+    chat: [
+      { id: "m1", author: "System", playerId: "sys", time: "12:04", text: "Group chat created automatically — only registered players are added." },
+      { id: "m2", author: "Maya Chen", playerId: "p1", time: "12:11", text: "See you all Saturday! Sending my fee now." },
+      { id: "m3", author: "Maya Chen", playerId: "p1", time: "12:12", receipt: { fileName: "gcash-receipt-8841.png" } },
+      { id: "m4", author: "Organizer", playerId: "org", time: "12:15", text: "Got it Maya — verified. You're in the shuffle pool." },
+      { id: "m5", author: "Diego Ramos", playerId: "p2", time: "12:31", receipt: { fileName: "maya-club-fee-diego.jpg" } },
+      { id: "m6", author: "Priya Nair", playerId: "p3", time: "13:02", text: "Sending mine tonight, promise!" },
+      { id: "m7", author: "Tomas Reyes", playerId: "p4", time: "13:40", receipt: { fileName: "transfer-confirmation-0442.png" } },
+    ] },
   { id: "e4", clubId: "c6", title: "Dink City: Slow-Play Social", type: "Social Night", day: "Fri", date: "Fri 13 Jun", time: "20:00 – 22:00", capacity: 20, filled: 14, level: "All levels", fee: 0, organizer: "The Kitchen Society", waitlist: 0, outdoor: false },
   { id: "e5", clubId: "c4", title: "Summer Open Qualifier", type: "Tournament", day: "Sun", date: "Sun 22 Jun", time: "08:00 – 16:00", capacity: 64, filled: 58, level: "Advanced", fee: 35, organizer: "Riverbend Events", waitlist: 0, outdoor: false },
   { id: "e6", clubId: "c3", title: "Wednesday Progression Night", type: "Beginner Night", day: "Wed", date: "Wed 18 Jun", time: "17:30 – 19:00", capacity: 16, filled: 16, level: "Beginner+", fee: 0, organizer: "Sam Whitfield", waitlist: 7, outdoor: true, rainRisk: 20 },
   { id: "e7", clubId: "c1", title: "Challenge Match: Hale vs. Park", type: "Challenge Match", day: "Tue", date: "Tue 17 Jun", time: "19:30 – 20:30", capacity: 2, filled: 2, level: "Advanced", fee: 0, organizer: "Downtown PC", waitlist: 0, outdoor: false },
   { id: "e8", clubId: "c8", title: "Doubles Night w/ Skill Balance", type: "Doubles Night", day: "Thu", date: "Thu 19 Jun", time: "18:00 – 20:00", capacity: 24, filled: 18, level: "Intermediate", fee: 6, organizer: "Metro Events", waitlist: 0, outdoor: false },
+  { id: "e9", clubId: "c1", title: "Friday Night Open Play", type: "Open Play", day: "Fri", date: "Fri 20 Jun", time: "19:00 – 21:00", capacity: 8, filled: 5, level: "Intermediate", fee: 5, organizer: "Downtown PC", waitlist: 0, outdoor: false,
+    elimination: "single", pairing: "blind", chatOpen: true,
+    participants: ["p2", "p5", "p6"],
+    paid: ["p2"],
+    chat: [
+      { id: "x1", author: "System", playerId: "sys", time: "09:00", text: "Group chat created automatically — only registered players are added." },
+      { id: "x2", author: "Diego Ramos", playerId: "p2", time: "09:14", receipt: { fileName: "fee-diego-friday.png" } },
+    ] },
+  { id: "e10", clubId: "c1", title: "Club Championship — Double Elim", type: "Tournament", day: "Sun", date: "Sun 29 Jun", time: "09:00 – 15:00", capacity: 32, filled: 21, level: "Intermediate+", fee: 20, organizer: "Downtown PC", waitlist: 0, outdoor: false,
+    elimination: "double", pairing: "pair" },
 ];
+
+export const playerName = (id: string) => {
+  if (id === "BYE") return "Bye";
+  const p = PLAYERS.find((x) => x.id === id);
+  return p ? p.name : "Guest player";
+};
 
 export const NOTIFICATIONS_SEED = [
   { id: "n1", icon: "calendar", title: "Waitlist slot opened", body: "Thursday Night Doubles Ladder — a spot just opened. You have 30:00 to claim it.", time: "2m ago", unread: true, kind: "waitlist" as const },
