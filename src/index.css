@@ -1,1 +1,278 @@
 @import "tailwindcss";
+
+@theme {
+  --color-court-950: #08130e;
+  --color-court-900: #0c1b14;
+  --color-court-850: #10231a;
+  --color-court-800: #142a20;
+  --color-court-700: #1c3a2c;
+  --color-court-600: #27503c;
+  --color-court-500: #35684e;
+  --color-court-400: #5a8f74;
+  --color-court-300: #8fb8a2;
+
+  --color-chalk: #f1f5e8;
+  --color-chalk-2: #e6edd6;
+  --color-chalk-3: #d5e0bd;
+  --color-ink: #10201a;
+
+  --color-lime: #c8f13f;
+  --color-lime-2: #a8d42b;
+  --color-lime-3: #86ac1d;
+  --color-teal: #3ecfad;
+  --color-clay: #ff7a45;
+  --color-gold: #f2c14e;
+  --color-blood: #e4573d;
+
+  --font-display: "Archivo", sans-serif;
+  --font-body: "Instrument Sans", sans-serif;
+  --font-mono: "Space Mono", monospace;
+
+  --shadow-lift: 0 18px 40px -18px rgba(4, 15, 10, 0.55);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 30px -14px rgba(4, 15, 10, 0.5);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-court-950);
+  color: var(--color-chalk);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-lime);
+  color: var(--color-court-950);
+}
+
+/* ---------- scrollbars ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-court-600) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-court-600);
+  border-radius: 8px;
+}
+
+/* ---------- textures ---------- */
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+.court-grid {
+  background-image: linear-gradient(rgba(200, 241, 63, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 241, 63, 0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.topo-glow {
+  background: radial-gradient(900px 480px at 85% -10%, rgba(200, 241, 63, 0.13), transparent 60%),
+    radial-gradient(700px 500px at -10% 30%, rgba(62, 207, 173, 0.1), transparent 60%);
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(200, 241, 63, 0.14) 0 2px,
+    transparent 2px 10px
+  );
+}
+
+/* ---------- keyframes ---------- */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+@keyframes rally {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  12% {
+    transform: translate(150px, -34px) scale(0.92);
+  }
+  25% {
+    transform: translate(286px, 6px) scale(1);
+  }
+  37% {
+    transform: translate(160px, 40px) scale(0.94);
+  }
+  50% {
+    transform: translate(20px, 4px) scale(1);
+  }
+  62% {
+    transform: translate(140px, -26px) scale(0.9);
+  }
+  75% {
+    transform: translate(280px, 14px) scale(1);
+  }
+  88% {
+    transform: translate(120px, 42px) scale(0.94);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes sweepIn {
+  from {
+    stroke-dashoffset: var(--dash, 300);
+  }
+  to {
+    stroke-dashoffset: var(--dashEnd, 60);
+  }
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes barGrow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.anim-fadeUp {
+  animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-marquee {
+  animation: marquee 42s linear infinite;
+}
+.anim-rally {
+  animation: rally 7.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+.anim-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+.anim-toast {
+  animation: toastIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-spin-slow {
+  animation: spinSlow 14s linear infinite;
+}
+.pulse-dot {
+  animation: pulseDot 1.6s ease-in-out infinite;
+}
+.bar-grow {
+  transform-origin: bottom;
+  animation: barGrow 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- reveal on scroll ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------- line-mask headline reveal ---------- */
+.line-mask {
+  overflow: hidden;
+  display: block;
+}
+.line-mask > span {
+  display: block;
+  transform: translateY(110%);
+  animation: lineUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes lineUp {
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* ---------- number flip ---------- */
+.score-tick {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s;
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .anim-marquee,
+  .anim-rally,
+  .anim-breathe,
+  .anim-spin-slow,
+  .pulse-dot {
+    animation: none;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .line-mask > span {
+    transform: none;
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
