@@ -90,7 +90,7 @@ function Dashboard({ go, registered, joined, user }: { go: (v: PlayerView) => vo
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-[11px] tracking-[0.25em] text-lime uppercase">Tuesday · 18:42</p>
-          <h1 className="mt-2 font-display font-black tracking-tight text-3xl sm:text-4xl">Good evening, <span className="text-lime">{VIEWER.name.split(" ")[0]}.</span></h1>
+          <h1 className="mt-2 font-display font-black tracking-tight text-3xl sm:text-4xl">Good evening, <span className="text-lime">{user.name.split(" ")[0]}.</span></h1>
           <p className="mt-1.5 text-chalk/55 text-[14px]">3 compatible games within 6 km tonight · your ladder match is in 2 days.</p>
         </div>
         <Button size="lg" icon="zap" onClick={() => go("playnow")}>Find me a game</Button>
@@ -620,6 +620,7 @@ export default function PlayerApp({ user, onLogout }: { user: SessionUser; onLog
             </div>
             <button onClick={onLogout} className="text-chalk/40 hover:text-blood transition" title="Sign out"><Icon name="logout" size={16} /></button>
           </div>
+          <p className="mt-2.5 text-center font-mono text-[9.5px] tracking-[0.2em] uppercase text-chalk/30">Build by <span className="text-chalk/55">Jonric Manisan</span></p>
         </div>
       </aside>
 
@@ -638,7 +639,7 @@ export default function PlayerApp({ user, onLogout }: { user: SessionUser; onLog
       {/* content */}
       <main className="lg:pl-60 pt-14 lg:pt-0 pb-24 lg:pb-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-7 lg:py-9">
-          {view === "home" && <Dashboard go={go} registered={registered} joined={joined} />}
+          {view === "home" && <Dashboard go={go} registered={registered} joined={joined} user={user} />}
           {view === "discover" && <Discover joined={joined} onJoin={joinClub} />}
           {view === "playnow" && <PlayNow />}
           {view === "dna" && <DnaView />}

@@ -504,6 +504,9 @@ export default function Landing({ onStart }: { onStart: (role: "player" | "club"
             <a href="#how" className="hover:text-lime transition">Docs</a>
           </div>
         </div>
+        <div className="mt-6 text-center font-mono text-[11px] tracking-widest uppercase text-chalk/40">
+          Build by <span className="text-lime">Jonric Manisan</span>
+        </div>
       </footer>
     </div>
   );
