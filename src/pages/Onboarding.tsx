@@ -4,8 +4,13 @@ import {
   validEmail, validPhone, NAME_MATCH_THRESHOLD,
 } from "../lib/engine";
 import type { PhotoCheck, Role, VerifyState } from "../lib/engine";
-import { Button, Chip, Field, Icon, Logo, useToast, VerifyBadge, inputCls } from "../components/ui";
+import { Button, Chip, Field, Icon, Logo, Modal, useToast, VerifyBadge, inputCls } from "../components/ui";
 import type { IconName } from "../components/ui";
+import {
+  deliverCode, generateCode, loadDeliveryConfig, saveDeliveryConfig,
+  emailConfigured, smsConfigured,
+} from "../lib/liveDelivery";
+import type { ChannelResult, DeliveryConfig } from "../lib/liveDelivery";
 
 export interface SessionUser {
   name: string;
@@ -89,11 +94,38 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
   const [human, setHuman] = useState(false);
   const [consent, setConsent] = useState(false);
 
-  // codes
+  // codes — generated locally and dispatched through live channels
   const [emailCode, setEmailCode] = useState("");
   const [phoneCode, setPhoneCode] = useState("");
   const [resends, setResends] = useState(0);
   const [cooldown, setCooldown] = useState(0);
+  const [code, setCode] = useState("");
+  const [emailCh, setEmailCh] = useState<ChannelResult | null>(null);
+  const [phoneCh, setPhoneCh] = useState<ChannelResult | null>(null);
+  const [sending, setSending] = useState(false);
+  const [cfgOpen, setCfgOpen] = useState(false);
+  const [cfg, setCfg] = useState<DeliveryConfig>(loadDeliveryConfig);
+
+  const dispatchCode = async (resend = false) => {
+    const fresh = generateCode();
+    setCode(fresh);
+    setEmailCh(null);
+    setPhoneCh(null);
+    setSending(true);
+    const res = await deliverCode(cfg, email, phone, fresh);
+    setEmailCh(res.email);
+    setPhoneCh(res.phone);
+    setSending(false);
+    if (resend) {
+      const okCount = [res.email, res.phone].filter((c) => c.ok).length;
+      toast({
+        icon: okCount === 2 ? "check" : "x",
+        tone: okCount === 2 ? "lime" : "gold",
+        title: okCount === 2 ? "Codes re-sent on both channels" : "Partial resend",
+        body: `Email: ${res.email.live ? (res.email.ok ? "delivered live" : "failed") : "sandbox"} · SMS: ${res.phone.live ? (res.phone.ok ? "delivered live" : "failed") : "sandbox"}.`,
+      });
+    }
+  };
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
@@ -121,7 +153,7 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
     sanity.ok && first.trim().length >= 2 && last.trim().length >= 2 && validEmail(email) &&
     validPhone(phone) && dob !== "" && pwCheck.score >= 3 && human && consent;
 
-  const codesValid = emailCode === "424242" && phoneCode === "424242";
+  const codesValid = code !== "" && emailCode === code && phoneCode === code;
 
   const startScan = () => {
     setScanning(true);
@@ -299,7 +331,7 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
 
             <div className="mt-8 flex justify-between">
               <Button variant="ghost" onClick={() => setStep(0)}>Back</Button>
-              <Button size="lg" icon="arrow" disabled={!accountValid} onClick={() => setStep(2)}>Continue</Button>
+              <Button size="lg" icon="arrow" disabled={!accountValid} onClick={() => { setStep(2); dispatchCode(); }}>Continue</Button>
             </div>
           </div>
         )}
@@ -308,29 +340,38 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
         {step === 2 && (
           <div className="anim-fadeUp max-w-lg">
             <h1 className="font-display font-black tracking-tight text-3xl">Confirm it's really you</h1>
-            <p className="mt-2 text-chalk/55 text-[14px]">We sent 6-digit codes to <span className="text-chalk font-semibold">{email || "your email"}</span> and <span className="text-chalk font-semibold">{phone || "your phone"}</span>. Registration is rate-limited — three resend attempts trigger a cooldown.</p>
-            <div className="mt-6 rounded-xl border border-gold/25 bg-gold/6 px-4 py-3 flex items-center gap-3">
-              <Icon name="spark" size={16} className="text-gold" />
-              <p className="text-[12.5px] text-chalk/70"><span className="font-bold text-gold">Sandbox provider:</span> use code <span className="font-mono font-bold text-chalk">424242</span> for both channels.</p>
+            <p className="mt-2 text-chalk/55 text-[14px]">A 6-digit code was sent to both <span className="text-chalk font-semibold">{email || "your email"}</span> and <span className="text-chalk font-semibold">{phone || "your phone"}</span>. Registration is rate-limited — three resend attempts trigger a cooldown.</p>
+
+            {/* live channel status */}
+            <div className="mt-6 space-y-2.5">
+              <ChannelRow icon="mail" label="Email" to={email} ch={emailCh} sending={sending} onConfigure={() => setCfgOpen(true)} fallbackCode={code} />
+              <ChannelRow icon="phone" label="SMS" to={phone} ch={phoneCh} sending={sending} onConfigure={() => setCfgOpen(true)} fallbackCode={code} />
             </div>
+            <button onClick={() => setCfgOpen(true)} className="mt-3 text-[12px] font-semibold text-chalk/45 hover:text-lime transition-colors inline-flex items-center gap-1.5">
+              <Icon name="gear" size={13} /> Configure live delivery (EmailJS / SMS gateway)
+            </button>
+
             <div className="mt-6 space-y-5">
-              <Field label="Email code" error={touched.ec && emailCode !== "424242" ? "Code doesn't match — check the sandbox hint above" : undefined}>
-                <input className={`${inputCls} font-mono tracking-[0.4em]`} maxLength={6} value={emailCode} onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, ""))} onBlur={() => blur("ec")} placeholder="······" inputMode="numeric" />
+              <Field label="Email code" error={touched.ec && code !== "" && emailCode !== code ? "Code doesn't match the one sent to your inbox" : undefined}>
+                <input className={`${inputCls} font-mono tracking-[0.4em]`} maxLength={6} value={emailCode} onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, ""))} onBlur={() => blur("ec")} placeholder="······" inputMode="numeric" autoComplete="one-time-code" />
               </Field>
-              <Field label="SMS code" error={touched.pc && phoneCode !== "424242" ? "Code doesn't match — check the sandbox hint above" : undefined}>
-                <input className={`${inputCls} font-mono tracking-[0.4em]`} maxLength={6} value={phoneCode} onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ""))} onBlur={() => blur("pc")} placeholder="······" inputMode="numeric" />
+              <Field label="SMS code" error={touched.pc && code !== "" && phoneCode !== code ? "Code doesn't match the one sent to your phone" : undefined}>
+                <input className={`${inputCls} font-mono tracking-[0.4em]`} maxLength={6} value={phoneCode} onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ""))} onBlur={() => blur("pc")} placeholder="······" inputMode="numeric" autoComplete="one-time-code" />
               </Field>
             </div>
             <button
               className="mt-4 text-[13px] font-semibold text-chalk/60 hover:text-lime transition disabled:opacity-40"
-              disabled={cooldown > 0 || resends >= 3}
+              disabled={cooldown > 0 || resends >= 3 || sending}
               onClick={() => {
                 setResends((r) => r + 1);
                 setCooldown(20);
-                toast({ icon: "bell", tone: "gold", title: resends >= 2 ? "Rate limit hit" : "Codes re-sent", body: resends >= 2 ? "Too many attempts — resends paused for 20s. This mirrors server-side brute-force protection." : "Fresh codes on the way (sandbox: 424242)." });
+                setEmailCode("");
+                setPhoneCode("");
+                dispatchCode(true);
+                if (resends >= 2) toast({ icon: "bell", tone: "gold", title: "Rate limit hit", body: "Too many attempts — resends paused for 20s. This mirrors server-side brute-force protection." });
               }}
             >
-              {cooldown > 0 ? `Resend available in ${cooldown}s` : resends >= 3 ? "Resends temporarily locked" : "Resend codes"}
+              {sending ? "Sending on both channels…" : cooldown > 0 ? `Resend available in ${cooldown}s` : resends >= 3 ? "Resends temporarily locked" : "Resend codes to email & phone"}
             </button>
             <div className="mt-8 flex justify-between">
               <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
@@ -464,6 +505,97 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
           </div>
         )}
       </div>
+
+      <DeliverySettings
+        open={cfgOpen}
+        cfg={cfg}
+        onClose={() => setCfgOpen(false)}
+        onSave={(next) => {
+          setCfg(next);
+          saveDeliveryConfig(next);
+          setCfgOpen(false);
+          toast({ icon: "check", tone: "lime", title: "Delivery channels saved", body: "New codes will be sent through your live email and SMS providers." });
+        }}
+      />
     </div>
+  );
+}
+
+/* per-channel delivery status row */
+function ChannelRow({ icon, label, to, ch, sending, onConfigure, fallbackCode }: {
+  icon: IconName;
+  label: string;
+  to: string;
+  ch: ChannelResult | null;
+  sending: boolean;
+  onConfigure: () => void;
+  fallbackCode: string;
+}) {
+  let badge: { icon: IconName; cls: string; text: string };
+  if (sending || ch === null) badge = { icon: "clock", cls: "text-chalk/50 border-chalk/15", text: "Sending…" };
+  else if (ch.live && ch.ok) badge = { icon: "check", cls: "text-lime border-lime/40 bg-lime/10", text: "Delivered live" };
+  else if (ch.live && !ch.ok) badge = { icon: "x", cls: "text-blood border-blood/40 bg-blood/10", text: ch.error || "Send failed" };
+  else badge = { icon: "spark", cls: "text-gold border-gold/40 bg-gold/10", text: "Sandbox" };
+
+  return (
+    <div className="rounded-xl border border-chalk/10 bg-court-900/70 px-4 py-3 flex items-center gap-3">
+      <Icon name={icon} size={17} className="text-chalk/60 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-chalk leading-tight">{label} <span className="font-normal text-chalk/45">→ {to}</span></p>
+        {badge.text === "Sandbox" && fallbackCode && (
+          <p className="text-[11.5px] text-chalk/50">Provider not connected — preview code: <span className="font-mono font-bold text-gold">{fallbackCode}</span> <button className="text-lime hover:underline font-semibold" onClick={onConfigure}>connect</button></p>
+        )}
+        {badge.text !== "Sandbox" && badge.icon === "x" && (
+          <p className="text-[11.5px] text-chalk/50">Check provider settings <button className="text-lime hover:underline font-semibold" onClick={onConfigure}>configure</button></p>
+        )}
+      </div>
+      <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider ${badge.cls}`}>
+        <Icon name={badge.icon} size={11} /> {badge.text}
+      </span>
+    </div>
+  );
+}
+
+/* live delivery configuration modal */
+function DeliverySettings({ open, cfg, onClose, onSave }: {
+  open: boolean;
+  cfg: DeliveryConfig;
+  onClose: () => void;
+  onSave: (c: DeliveryConfig) => void;
+}) {
+  const [draft, setDraft] = useState<DeliveryConfig>(cfg);
+  useEffect(() => { if (open) setDraft(cfg); }, [open, cfg]);
+  const up = (k: keyof DeliveryConfig, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  return (
+    <Modal open={open} onClose={onClose} title="Live code delivery">
+      <div className="space-y-5">
+        <p className="text-[12.5px] text-chalk/55 leading-relaxed">
+          Connect real providers so verification codes are delivered live to the registrant's inbox and phone.
+          Credentials are stored only in this browser. When a channel is empty, the flow falls back to a labelled sandbox channel.
+        </p>
+        <div>
+          <p className="font-mono text-[11px] tracking-widest text-teal flex items-center gap-2"><Icon name="mail" size={13} /> EMAIL — EMAILJS</p>
+          <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Service ID"><input className={inputCls} value={draft.emailjsServiceId} onChange={(e) => up("emailjsServiceId", e.target.value)} placeholder="service_xxx" /></Field>
+            <Field label="Template ID"><input className={inputCls} value={draft.emailjsTemplateId} onChange={(e) => up("emailjsTemplateId", e.target.value)} placeholder="template_xxx" /></Field>
+            <Field label="Public key"><input className={inputCls} value={draft.emailjsPublicKey} onChange={(e) => up("emailjsPublicKey", e.target.value)} placeholder="xxxxxxx" /></Field>
+          </div>
+          <p className="mt-1.5 text-[11px] text-chalk/40">Template variables: <span className="font-mono">{"{{to_email}}"}</span>, <span className="font-mono">{"{{verify_code}}"}</span>, <span className="font-mono">{"{{platform}}"}</span></p>
+        </div>
+        <div>
+          <p className="font-mono text-[11px] tracking-widest text-gold flex items-center gap-2"><Icon name="phone" size={13} /> SMS — TWILIO-COMPATIBLE GATEWAY</p>
+          <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Endpoint URL"><input className={inputCls} value={draft.smsEndpoint} onChange={(e) => up("smsEndpoint", e.target.value)} placeholder="https://your-worker.dev/sms" /></Field>
+            <Field label="Bearer token"><input className={inputCls} type="password" value={draft.smsToken} onChange={(e) => up("smsToken", e.target.value)} placeholder="optional" /></Field>
+            <Field label="From number"><input className={inputCls} value={draft.smsFrom} onChange={(e) => up("smsFrom", e.target.value)} placeholder="+63 917 000 0000" /></Field>
+          </div>
+          <p className="mt-1.5 text-[11px] text-chalk/40">POST <span className="font-mono">{"{ from, to, body }"}</span> — point this at a small serverless function holding your Twilio credentials server-side. Never ship account secrets to the browser.</p>
+        </div>
+        <div className="flex justify-end gap-2.5">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button icon="check" onClick={() => onSave(draft)}>Save channels</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

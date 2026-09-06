@@ -12,9 +12,19 @@ export type IconName =
   | "filter" | "check" | "x" | "arrow" | "spark" | "clock" | "trend"
   | "zap" | "target" | "gauge" | "id" | "camera" | "lock" | "doc" | "alert"
   | "star" | "heart" | "sun" | "wave" | "eye" | "flag" | "gear" | "logout"
-  | "home" | "grid" | "chart" | "plus" | "minus" | "chevD" | "globe" | "flame";
+  | "home" | "grid" | "chart" | "plus" | "minus" | "chevD" | "globe" | "flame"
+  | "mail" | "phone";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  mail: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <path d="m3.5 7 8.5 6 8.5-6" />
+    </>
+  ),
+  phone: (
+    <path d="M8.4 3.6 10 7.2c.3.7.1 1.4-.4 1.9l-1.3 1.2a13.6 13.6 0 0 0 5.4 5.4l1.2-1.3c.5-.5 1.2-.7 1.9-.4l3.6 1.6c.8.4 1.2 1.3.9 2.1l-.8 2.2c-.3.8-1 1.3-1.9 1.2C10.6 20.6 3.4 13.4 2.9 5.4c-.1-.9.4-1.6 1.2-1.9l2.2-.8c.8-.3 1.7.1 2.1.9Z" />
+  ),
   ball: (
     <>
       <circle cx="12" cy="12" r="9" />
