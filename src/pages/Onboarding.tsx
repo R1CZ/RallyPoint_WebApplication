@@ -83,7 +83,7 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
-  const [country, setCountry] = useState("United States");
+  const [country, setCountry] = useState("Philippines");
   const [pw, setPw] = useState("");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [human, setHuman] = useState(false);
@@ -263,14 +263,14 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
                 <input className={inputCls} type="email" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => blur("email")} placeholder="you@example.com" autoComplete="email" />
               </Field>
               <Field label="Phone" error={touched.phone && !validPhone(phone) ? "Enter a valid phone number" : undefined}>
-                <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => blur("phone")} placeholder="+1 555 010 2244" autoComplete="tel" />
+                <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => blur("phone")} placeholder="+63 917 555 0142" autoComplete="tel" />
               </Field>
               <Field label="Date of birth" hint="Used only for age-gated events">
                 <input className={inputCls} type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
               </Field>
               <Field label="Country / region">
                 <select className={inputCls} value={country} onChange={(e) => setCountry(e.target.value)}>
-                  {["United States", "Canada", "United Kingdom", "Germany", "Spain", "France", "Australia", "India", "Brazil", "Japan", "Other"].map((c) => <option key={c}>{c}</option>)}
+                  {["Philippines", "United States", "Canada", "United Kingdom", "Germany", "Spain", "France", "Australia", "India", "Brazil", "Japan", "Other"].map((c) => <option key={c}>{c}</option>)}
                 </select>
               </Field>
             </div>
