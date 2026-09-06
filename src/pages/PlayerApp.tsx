@@ -67,7 +67,7 @@ function DiscoveryMap({ clubs, selected, onSelect }: { clubs: ClubInfo[]; select
 }
 
 /* ---------------- dashboard ---------------- */
-function Dashboard({ go, registered, joined }: { go: (v: PlayerView) => void; registered: string[]; joined: string[] }) {
+function Dashboard({ go, registered, joined, user }: { go: (v: PlayerView) => void; registered: string[]; joined: string[]; user: SessionUser }) {
   const toast = useToast();
   const matches = useMemo(() => fairMatch(VIEWER, PLAYERS).slice(0, 3), []);
   const nextEvents = EVENTS.filter((e) => e.filled < e.capacity || registered.includes(e.id)).slice(0, 3);
