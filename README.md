@@ -40,22 +40,44 @@ Deterministic and dependency-free — everything the platform *claims* is comput
 - `eloDelta()` — transparent rating math (K=24)
 - `riskLevel()` — weighted fraud signals → LOW / MEDIUM / REVIEW REQUIRED / HIGH (never auto-punitive)
 
-## Architecture notes (production target)
+## Architecture
 
 ```
-web (this app) ── HTTPS ──▶ /api/v1/{auth,users,verification,clubs,members,events,
-                              matches,rankings,messaging,notifications,admin,moderation,analytics}
-                              │ NestJS modules · DTO validation · authz middleware (RBAC per route)
-                              ├─ PostgreSQL (normalized: users, identity_verifications, clubs,
-                              │   club_memberships, club_roles, courts, events, event_registrations,
-                              │   waitlists, matches, match_players, ratings, rankings, achievements,
-                              │   availability, notifications, messages, reports, moderation_actions,
-                              │   audit_logs, subscriptions, payments, documents_metadata, fraud_risk_events)
-                              ├─ Redis (sessions, rate limits, waitlist timers)
-                              ├─ Object storage (signed URLs, randomized names, MIME/size validation,
-                              │   decompression guards; documents purged on retention policy)
-                              └─ KYC provider (document authenticity, OCR, face-match, liveness)
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (React + Vite)                   │
+│  Landing │ Onboarding │ Player App │ Club Wizard │ Club Admin│
+│                      │  API Client (src/lib/api.ts)         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTP/REST
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Backend (Express + TypeScript)               │
+│  server/index.ts                                             │
+│  ├─ Auth middleware (JWT)                                    │
+│  ├─ Rate limiting (express-rate-limit)                       │
+│  ├─ Routes: auth, users, clubs, events, matches, verification│
+│  └─ Validation (zod)                                         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              SQLite Database (better-sqlite3)                │
+│  server/data/rallypoint.db                                   │
+│  Tables: users, user_profiles, identity_verifications,       │
+│          clubs, club_memberships, events, event_registrations,│
+│          event_chats, event_brackets, matches, match_players,│
+│          notifications, audit_logs                           │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+### Production target (future)
+
+For production deployment, replace SQLite with PostgreSQL and add:
+- Redis for sessions, rate limits, waitlist timers
+- Object storage (S3) with signed URLs for document uploads
+- KYC provider integration (Onfido, Jumio, etc.)
+- Email/SMS providers (SendGrid, Twilio)
+- Payment processor (Stripe)
 
 **Security principles implemented in the UX contract:** all validation repeated server-side;
 authorization enforced per endpoint (never frontend-only); IDs never displayed publicly; only
@@ -65,12 +87,54 @@ resends and messaging.
 
 ## Running locally
 
+### Full-stack (frontend + backend)
+
 ```bash
+# Install dependencies
 npm install
-npm run dev        # start dev server
+
+# Copy environment variables
+cp .env.example .env
+
+# Start both frontend and backend
+npm run dev
+```
+
+This starts:
+- Frontend on `http://localhost:5173` (Vite dev server)
+- Backend on `http://localhost:3001` (Express API)
+
+### Frontend only
+
+```bash
+npm run dev:frontend
+```
+
+### Backend only
+
+```bash
+npm run dev:backend
+```
+
+### Production build
+
+```bash
 npm run build      # production build → dist/
 npm run typecheck  # strict TS check
 ```
+
+## Backend API
+
+The backend provides a RESTful API at `/api/v1/`:
+
+- **Auth**: `/auth/register`, `/auth/login`, `/auth/verify-email`, `/auth/verify-phone`, `/auth/me`
+- **Users**: `/users/:id`, `/users/profile`, `/users/:id/clubs`, `/users/:id/notifications`
+- **Clubs**: `/clubs`, `/clubs/:id`, `/clubs/:id/join`, `/clubs/:id/members`
+- **Events**: `/events`, `/events/:id`, `/events/:id/register`, `/events/:id/chat`, `/events/:id/paid/:userId`, `/events/:id/bracket`, `/events/:id/close-chat`
+- **Matches**: `/matches/history/:userId`, `/matches`
+- **Verification**: `/verification/start`, `/verification/complete`, `/verification/status`
+
+All endpoints except `/auth/register`, `/auth/login`, `/clubs`, `/clubs/:id`, `/events`, `/events/:id` require authentication via JWT token in the `Authorization: Bearer <token>` header.
 
 ## Environment (production deployment)
 
