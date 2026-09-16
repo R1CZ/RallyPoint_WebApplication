@@ -21,15 +21,6 @@ function loadSession(): SessionUser | null {
   }
 }
 
-const DEMO_PLAYER: SessionUser = {
-  name: "Alex Rivera", email: "alex@rallypoint.app", role: "player",
-  verified: "VERIFIED", photoVerified: true, avatarHue: 84,
-};
-const DEMO_OWNER: SessionUser = {
-  name: "Jordan Blake", email: "jordan@riversiderally.club", role: "club",
-  verified: "VERIFIED", photoVerified: true, avatarHue: 200,
-};
-
 export default function App() {
   const [user, setUser] = useState<SessionUser | null>(loadSession);
   const [route, setRoute] = useState<Route>(() => {
@@ -55,19 +46,7 @@ export default function App() {
   return (
     <ToastProvider>
       {route === "landing" && (
-        <>
-          <Landing onStart={startOnboarding} />
-          {/* instant demo access */}
-          <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2 items-start">
-            <div className="rounded-2xl border border-chalk/12 bg-court-900/95 backdrop-blur px-4 py-3.5 shadow-lift">
-              <p className="font-mono text-[10px] tracking-widest text-chalk/40 mb-2.5">SKIP AHEAD · SANDBOX DEMO</p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="dark" icon="paddle" onClick={() => { setUser(DEMO_PLAYER); setRoute("player"); }}>Player app</Button>
-                <Button size="sm" variant="dark" icon="court" onClick={() => { setUser(DEMO_OWNER); setRoute("club"); }}>Club admin</Button>
-              </div>
-            </div>
-          </div>
-        </>
+        <Landing onStart={startOnboarding} />
       )}
 
       {route === "onboarding" && (
