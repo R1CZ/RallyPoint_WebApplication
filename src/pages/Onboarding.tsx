@@ -11,8 +11,10 @@ import {
   emailConfigured, smsConfigured,
 } from "../lib/liveDelivery";
 import type { ChannelResult, DeliveryConfig } from "../lib/liveDelivery";
+import { api, setToken } from "../lib/api";
 
 export interface SessionUser {
+  id: string;
   name: string;
   email: string;
   role: Role;
@@ -186,15 +188,48 @@ export default function Onboarding({ initialRole, onDone, onBack }: { initialRol
     }, 620);
   };
 
-  const finish = () => {
-    onDone({
-      name: fullName || "Alex Rivera",
-      email: email || "alex@rallypoint.app",
-      role,
-      verified: result?.state === "NEEDS_REVIEW" ? "NEEDS_REVIEW" : "VERIFIED",
-      photoVerified: true,
-      avatarHue: Math.abs(fullName.length * 37) % 360,
-    });
+  const finish = async () => {
+    try {
+      // Register user with backend
+      const response = await api.auth.register({
+        firstName: first.trim(),
+        lastName: last.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password: pw,
+        dob: dob || undefined,
+        country,
+        role,
+      });
+
+      // Save token
+      setToken(response.token);
+
+      // Notify parent
+      onDone({
+        id: response.user.id,
+        name: `${first.trim()} ${last.trim()}`,
+        email: email.trim(),
+        role,
+        verified: "VERIFIED",
+        photoVerified: true,
+        avatarHue: response.user.avatarHue,
+      });
+
+      toast({
+        icon: "check",
+        tone: "lime",
+        title: "Account created!",
+        body: "Welcome to RallyPoint. Your account is ready.",
+      });
+    } catch (err) {
+      toast({
+        icon: "alert",
+        tone: "blood",
+        title: "Registration failed",
+        body: err instanceof Error ? err.message : "Please try again",
+      });
+    }
   };
 
   const blur = (k: string) => setTouched((t) => ({ ...t, [k]: true }));

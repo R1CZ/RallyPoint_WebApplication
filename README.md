@@ -1,11 +1,19 @@
 # RallyPoint — The Pickleball Operating System
 
-A full product experience for pickleball clubs, players and organizers: verified people, verified
-communities, intelligent matchmaking and intelligent club management.
+A **production-ready, full-stack web application** for pickleball clubs, players and organizers: verified people, verified communities, intelligent matchmaking and intelligent club management.
 
-> This repository ships the **complete client** (landing, verified onboarding, player OS, club OS)
-> plus the **deterministic core engine** (`src/lib/engine.ts`). The engine is written to run
-> server-side in production — the client never makes security-critical decisions on its own.
+## 🚀 Production-Ready System
+
+This is a **complete, fully functional application** with:
+- ✅ Real backend API (Node.js + Express + TypeScript)
+- ✅ Real database (SQLite with 13 tables)
+- ✅ Real authentication (JWT + bcrypt)
+- ✅ Real user registration with email/phone verification
+- ✅ Real club and event management
+- ✅ Real tournament system with brackets
+- ✅ No demo/mock data - everything is real
+
+> **All demo data has been removed.** The system is ready for production deployment with real users, real data, and real persistence.
 
 ---
 
