@@ -30,11 +30,7 @@ This is a **complete, fully functional application** with:
 - ✅ Real user registration with email/phone verification
 - ✅ Real club and event management
 - ✅ Real tournament system with brackets
-- ✅ No demo/mock data - everything is real
 
-> **All demo data has been removed.** The system is ready for production deployment with real users, real data, and real persistence.
-
----
 
 ## What's inside
 
